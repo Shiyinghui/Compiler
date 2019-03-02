@@ -1,0 +1,129 @@
+//  基本C语言递归子程序文法：
+Program -> ExtDefList
+ExtDefList -> DefList  FunDef CompSt         ////////////////
+FunDef -> int main ()
+CompSt -> { DefList Statement }
+Statement -> StmtList Statement | DefList Statement | ε
+
+DefList -> Def DefList | ε
+Def -> specifier DecList ;           // specifier: int float char double short long signed unsigned
+DecList -> Dec Dec1
+Dec1 -> , Dec Dec1| ε            // , 连续定义多个变量
+Dec -> Va Init     // Init 进行初始化
+Init -> = Init1 | ε                   ///////////////////////////////
+Init1 -> Exp | { ElemList }  
+ElemList -> elem Elem    // elem:  const 常量，character 字符
+Elem -> , elem Elem | ε            // 连续初始化         
+Va -> identifier Va1   // identifier 标识符
+Va1 -> [ 整型常量 ] |  ε //  数组
+
+ (添加数组时扩充为：Va -> identifier Va1, Va1 -> [ int ] | ε)
+
+StmtList -> Stmt StmtList | ε
+Stmt -> AssignList | if (Exp) Stmt Other | CompSt | return Exp(or return S); | while (Exp) Stmt | break ; | continue ;
+
+Other -> else Stmt | ε
+S -> Exp | ε               //   ε  用于子程序的扩展，主函数须有返回值
+
+// 赋值, C语言中简单无赋值号的表达式可以出现，不报错，但有warning, 此处按最严谨的来
+AssignList -> Assign AssignList | ε 
+Assign -> Ass Assign1 
+Assign1 -> , Ass Assign1 | ;     // , 允许一条赋值语句里出现多个赋值表达式
+Ass -> Va sign1 Ass | Exp           // sign1 : =, +=, -=, *=, / =, %=   
+
+Exp -> C;   // 表达式
+C -> D C1
+C1 -> || D C1 | ε
+D -> E D1
+D1 -> && E D1 |ε
+E -> ! E | - E | F         
+F -> G F1
+F1 -> sign2 G F1 | ε              // sign2 : >, <, >=, <=, ==, !=
+G -> H G1
+G1 -> sign3 H G1 | ε           // sign3: + , -
+H -> I H1
+H1 -> sign4 I H1 | ε             // sign4: *, /
+I -> (Exp) | Va J | ++ Va | -- Va | const | char   // const: 实型或整型常量 
+J -> ++ | -- | ε
+//待扩充: 数组、结构体 、子程序
+
+
+//  翻译文法：
+Program -> ExtDefList
+ExtDefList -> DefList  FunDef CompSt   /////////////
+FunDef -> int main ()
+CompSt -> { DefList Statement }
+Statement -> StmtList Statement | DefList Statement | ε
+
+DefList -> Def DefList | ε
+Def -> specifier DecList ;           // specifier: int float char double 
+DecList -> Dec Dec1
+Dec1 -> , Dec Dec1| ε            // , 连续定义多个变量
+Dec -> Va Init                  // Init 进行初始化
+Init -> = Init1 | ε               
+Init1 -> Exp | { ElemList }  
+Va -> identifier  { PUSH(identifier) } Va1         // identifier 标识符
+Va1 -> [ {PUSH( [ ) } 整型常量 { PUSH(整型常量) } ] { PUSH( ] ) }
+ (添加数组时扩充为：Va -> identifier Va1, Va1 -> [ int ] | ε)
+
+StmtList -> Stmt StmtList | ε
+Stmt -> AssignList | if (Exp) { IF () } Stmt Other { IE () } | CompSt | return Exp(or return S) ; { RETURN() }
+             | while { WH() }  (Exp) { DO() } Stmt | break ; { BREAK() } | continue ; { CONTINUE() }
+
+Other -> else  { EL() }  Stmt | ε
+S -> Exp | ε               //   ε  用于子程序的扩展，主函数须有返回值
+
+// 赋值, C语言中简单无赋值号的表达式可以出现，不报错，但有warning, 此处按最严谨的来
+AssignList -> Assign AssignList | ε 
+Assign -> Ass Assign1 
+Assign1 -> , Ass Assign1 | ;     // , 允许一条赋值语句里出现多个赋值表达式
+Ass -> Va sign1 Ass { ASSI() }| Exp           // sign1 : =, +=, -=, *=, / =, %=   
+
+Exp -> C;   // 表达式
+C -> D C1
+C1 -> || D { OR() } C1 | ε
+D -> E D1
+D1 -> && { AND () } E D1 |ε
+E -> ! E { NOT () } | - E { MINUS () }| F 
+F -> G F1
+F1 -> sign2 G { sign2()} F1 | ε              // sign2 : >, <, >=, <=, ==, !=
+G -> H G1
+G1 -> sign3 H { GEQ(sign3) } G1 | ε           // sign3: + , -
+H -> I H1
+H1 -> sign4 I { GEQ(sign4) }  H1 | ε             // sign4: *, /
+I -> (Exp) | Va J | ++ Va  { GEQ(++) }   | -- Va   { GEQ(--) } | const  { PUSH(const) }  | char    // const: 实型或整型常量 
+J -> ++ | -- | ε
+//待扩充: 数组、结构体 、子程序
+
+// 报告 warning 和 error 时的几个细节：
+
+变量定义（声明）语句：
+ 1.  specifier (int / float / char double bool)   identifier1  = identifier2
+      identifier2 未定义（即在符号表中查找不到）  报错: identifier2 was not declared in this scope
+	  identifier2 未初始化 （符号表中相应项标记为 0）警告：identifier2 was used uninitialized in this function
+	  identifier2 精度大于identifier1 (如 identifier1:  char int 型  identifier2: float double 型)    警告：possible loss of data
+
+
+ 2.  char a = 4;          整型常量可以初始化字符型变量
+ 3.  bool  a = 4 or bool a= 1.2 非0的整型常量，浮点型常量可以赋值给布尔型变量，自动转化为1，0 赋值给变量则为0
+
+ 4.  specifier1 identifier1;
+      specifier2 identifier1;
+	  specifier1 = specifier2       遇到第2条变量定义语句，标识符填符号表时，经查找重复，且类型相同   报错： redeclaration of "specifier1 identifier1"
+	  specifier1!= specifier2       遇到第2条变量定义语句，标识符填符号表时，经查找重复，但类型不同   
+	                                            报错： conflicting declaration  "specifier2 identifier1", previous declaration as  "specifier1 identifier1"
+
+操作语句：
+  1.   赋值语句 
+        identifier1 = (or +=,-= etc.) identifier2 
+		identifier1 (identifier2) 未定义 ，报错：identifier1(identifier2) was not declared in this scope
+		identifier2 精度大于identifier1 (如 identifier1:  char int 型  identifier2: float double 型)    警告：possible loss of data
+		identifier1(int float double), identifier2( 字符串类型)  报错：invalid conversion from "const char*" to "int(double float)"
+2.     
+
+
+unsolved problems:
+ 
+ 1.    a = 3+ b++;
+        生成四元式的正确顺序
+ 2.    main()括号里加 void
